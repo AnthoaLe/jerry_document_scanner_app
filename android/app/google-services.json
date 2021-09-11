@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "820261503791",
+    "project_id": "scannerapp-e897c",
+    "storage_bucket": "scannerapp-e897c.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:820261503791:android:b292e0a5a92f5d580917da",
+        "android_client_info": {
+          "package_name": "com.codingmindsacademy.anhoale.jerry_document_scanner_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "820261503791-3rgr2e7b2baek5gjlgvprt5a9u2sab6k.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCG_-HMiEyNtbzVe_M_OOVJOScskx5y_ME"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "820261503791-3rgr2e7b2baek5gjlgvprt5a9u2sab6k.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
