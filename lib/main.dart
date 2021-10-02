@@ -1,7 +1,8 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
-
+import 'package:path_provider/path_provider.dart';
 import 'package:google_ml_kit/google_ml_kit.dart';
 
 late List<CameraDescription> cameras;
@@ -21,6 +22,7 @@ class MyApp extends StatelessWidget {
       title: 'Jerry Document Scanner',
       theme: ThemeData.dark(),
       home: const TakePicture(),
+      debugShowCheckedModeBanner: false,
     );
   }
 }
@@ -140,6 +142,39 @@ class RecognizeText extends StatefulWidget {
 
 class _RecognizeTextState extends State<RecognizeText> {
   late List<String> foundLines;
+  static const Map<String, List<String>> bloodCauses = {
+    'WBCs': ["Possible causes: "
+        "An increased production of white blood cells to fight an infection. "
+        "A reaction to a drug that increases white blood cell production. "
+        "A disease of bone marrow, causing abnormally high production of white blood cells. "
+        "An immune system disorder that increases white blood cell production.",
+        "Possible causes: "
+        "Viral infections that temporarily disrupt the work of bone marrow. "
+        "Certain disorders present at birth (congenital) that involve diminished bone marrow function. "
+        "Autoimmune disorders that destroy white blood cells or bone marrow cells. "
+        "Severe infections that use up white blood cells faster than they can be produced. "
+        "Medications, such as antibiotics, that destroy white blood cells."],
+    'Neutophils': ['High', 'Low'],
+    'Lymphocyles': ['High', 'Low'],
+    'Monocytes': ['High', 'Low'],
+    'Eosinophils': ['High', 'Low'],
+    'Basophils': ['High', 'Low'],
+    'RBCs': ['High', 'Low'],
+    'Hb': ['High', 'Low'],
+    'Hematocrit': ['High', 'Low'],
+    'Platelets': ['High', 'Low'],
+  };
+  late List<String> finalResults;
+
+  int getItemIndex(medItems, item) {
+    int index = -1;
+    for(var medItem in medItems) {
+      if (item.contains(medItem)) {
+        return medItems.indexOf(medItem);
+      }
+    }
+    return index;
+  }
 
   Future<List<String>> processImage() async {
     try {
@@ -155,7 +190,41 @@ class _RecognizeTextState extends State<RecognizeText> {
             textLinesList.add(line.text);
           }
         }
-        return textLinesList;
+
+        var medItems = ["WBCs", "Neutophils", "Lymphocyles", "Monocytes", "Eosinophils", "Basophils", "RBCs", "Hb", "Hematocrit", "Platelets"];
+
+        List<String> newResultList = [];
+
+        for(var item in textLinesList) {
+          if (getItemIndex(medItems, item) >= 0) {
+            print("Found an important item: " + item);
+            try {
+              var pos = textLinesList.indexOf(item);
+              var result = double.parse(textLinesList[pos + 1]);
+              var reference = textLinesList[pos + 2];
+              var ranges = reference.split("to");
+              var min = double.parse(ranges[0]);
+              var max = double.parse(ranges[1]);
+              var decision = "Abnormal";
+              if (result >= min && result <= max) {
+                decision = "Normal";
+              }else if (result < min) {
+                decision = "Abnormally Low";
+              }else if (result > max) {
+                decision = "Abnormally High";
+              }
+              var newResultStr = item + ": " + decision;
+              print(newResultStr);
+              newResultList.add(newResultStr);
+            } catch (e) {
+              print("Failed to parse the item");
+            }
+          }
+        }
+
+        print(newResultList);
+        finalResults = newResultList;
+        return newResultList;
       } catch (e) {
         rethrow;
       } finally {
@@ -165,6 +234,27 @@ class _RecognizeTextState extends State<RecognizeText> {
     } catch (e) {
       print(e);
       return ["Error"];
+    }
+  }
+
+  String returnFirstWord(String sentence) {
+    return sentence.split(" ")[0];
+  }
+
+  String returnLastWord(String sentence) {
+    final List<String> words = sentence.split(" ");
+    return words[words.length-1];
+  }
+
+  String returnCause(String result) {
+    final String firstWord = returnFirstWord(result);
+    final String lastWord = returnLastWord(result);
+    if (lastWord == "High") {
+      return bloodCauses[firstWord]![0];
+    } else if (lastWord == "Low") {
+      return bloodCauses[firstWord]![1];
+    } else {
+      return "Healthy result. Nothing to report.";
     }
   }
 
@@ -183,6 +273,7 @@ class _RecognizeTextState extends State<RecognizeText> {
               itemBuilder: (context, index) {
                 return ListTile(
                   title: Text(foundLines[index]),
+                  subtitle: Text(returnCause(foundLines[index])),
                 );
               },
               itemCount: foundLines.length,
@@ -198,7 +289,7 @@ class _RecognizeTextState extends State<RecognizeText> {
           Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (context) {
-                  return RegexScreen(foundLines: foundText);
+                  return WriteToFile(information: finalResults);
                   },
               )
           );
@@ -233,6 +324,33 @@ class _RegexScreenState extends State<RegexScreen> {
   Widget build(BuildContext context) {
     return Container(
       child: foundMatch() ? Text("Found") : Text("Not Found"),
+    );
+  }
+}
+
+class WriteToFile extends StatefulWidget {
+  const WriteToFile({Key? key, required this.information}) : super(key: key);
+
+  final List<String> information;
+
+  @override
+  _WriteToFileState createState() => _WriteToFileState();
+}
+
+class _WriteToFileState extends State<WriteToFile> {
+  void write() async {
+    final Directory dir = await getApplicationDocumentsDirectory();
+    final File file = File('${dir.path}/information.txt');
+    String stringFromList = widget.information.join('');
+    file.writeAsString(stringFromList);
+    print('confirmed');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ElevatedButton(
+      child: Text("Confirm Write"),
+      onPressed: () => write(),
     );
   }
 }
