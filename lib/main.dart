@@ -1,9 +1,12 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:google_ml_kit/google_ml_kit.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:flutter/services.dart';   // Access to the phone's orientation
 
 late List<CameraDescription> cameras;
 
@@ -41,6 +44,8 @@ class _TakePictureState extends State<TakePicture> {
   @override
   void initState() {
     super.initState();
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp,
+      DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
     controller = CameraController(cameras.first, ResolutionPreset.max);
     initializeControllerFuture = controller.initialize();
   }
@@ -142,38 +147,78 @@ class RecognizeText extends StatefulWidget {
 
 class _RecognizeTextState extends State<RecognizeText> {
   late List<String> foundLines;
-  static const Map<String, List<String>> bloodCauses = {
-    'WBCs': ["Possible causes: "
-        "An increased production of white blood cells to fight an infection. "
-        "A reaction to a drug that increases white blood cell production. "
-        "A disease of bone marrow, causing abnormally high production of white blood cells. "
-        "An immune system disorder that increases white blood cell production.",
-        "Possible causes: "
-        "Viral infections that temporarily disrupt the work of bone marrow. "
-        "Certain disorders present at birth (congenital) that involve diminished bone marrow function. "
-        "Autoimmune disorders that destroy white blood cells or bone marrow cells. "
-        "Severe infections that use up white blood cells faster than they can be produced. "
-        "Medications, such as antibiotics, that destroy white blood cells."],
-    'Neutophils': ['High', 'Low'],
-    'Lymphocyles': ['High', 'Low'],
-    'Monocytes': ['High', 'Low'],
-    'Eosinophils': ['High', 'Low'],
-    'Basophils': ['High', 'Low'],
-    'RBCs': ['High', 'Low'],
-    'Hb': ['High', 'Low'],
-    'Hematocrit': ['High', 'Low'],
-    'Platelets': ['High', 'Low'],
-  };
-  late List<String> finalResults;
+  // static const Map<String, List<String>> bloodCauses = {
+  //   'WBCs': ["Possible causes: "
+  //       "An increased production of white blood cells to fight an infection. "
+  //       "A reaction to a drug that increases white blood cell production. "
+  //       "A disease of bone marrow, causing abnormally high production of white blood cells. "
+  //       "An immune system disorder that increases white blood cell production.",
+  //       "Possible causes: "
+  //       "Viral infections that temporarily disrupt the work of bone marrow. "
+  //       "Certain disorders present at birth (congenital) that involve diminished bone marrow function. "
+  //       "Autoimmune disorders that destroy white blood cells or bone marrow cells. "
+  //       "Severe infections that use up white blood cells faster than they can be produced. "
+  //       "Medications, such as antibiotics, that destroy white blood cells."],
+  //   'Neutophils': ['High', 'Low'],
+  //   'Lymphocyles': ['High', 'Low'],
+  //   'Monocytes': ['High', 'Low'],
+  //   'Eosinophils': ['High', 'Low'],
+  //   'Basophils': ['High', 'Low'],
+  //   'RBCs': ['High', 'Low'],
+  //   'Hb': ['High', 'Low'],
+  //   'Hematocrit': ['High', 'Low'],
+  //   'Platelets': ['High', 'Low'],
+  // };
+  String textResults = '';
 
-  int getItemIndex(medItems, item) {
-    int index = -1;
-    for(var medItem in medItems) {
-      if (item.contains(medItem)) {
-        return medItems.indexOf(medItem);
+  var medItems = {
+    "White Blood Count": ['WBC', 'WBCs', 'White Blood Cells', 'White Blood Count', 'White Cell Count', 'White Blood Cell Count'],
+    "Neutrophils": ['Neutrophils'],
+    "Lymphocytes": ['Lymphocytes', 'Lymphs'],
+    "Monocytes": ['Monocytes'],
+    "Eosinophils": ['Eosinophils', 'Eos'],
+    "Basophils": ['Basophils', 'Basos'],
+    "Red Blood Count": ['RBC', 'RBCs', 'Red Blood Cells', 'Red Blood Count', 'Red Cell Count', 'Red Blood Cell Count'],
+    "Hemoglobin": ['Hemoglobin', 'Hb'],
+    "Hematocrit": ['Hematocrit'],
+    "Platelets": ['Platelets']
+  };
+
+  List<String> itemsNotFound = ["White Blood Count", "Neutrophils", "Lymphocytes", "Monocytes", "Eosinophils",
+    "Basophils", "Red Blood Count", "Hemoglobin", "Hematocrit", "Platelets"];
+
+  bool medItemFound(String item) {
+    for (String itemNotFound in itemsNotFound) {
+      for (String medItem in medItems[itemNotFound]!) {
+        if (item.contains(medItem)) {
+          itemsNotFound.remove(medItem);
+          return true;
+        }
       }
     }
-    return index;
+    return false;
+  }
+
+  String returnValue(String item) {
+    RegExp valuePattern = RegExp(r"\d+(\.\d+)?");
+    RegExpMatch? foundPattern = valuePattern.firstMatch(item);
+    if (foundPattern == null) {
+      return "No result value found.";
+    }
+    int startPattern = foundPattern.start;
+    int endPattern = foundPattern.end;
+    return item.substring(startPattern, endPattern);
+  }
+
+  String returnRange(String item) {
+    RegExp valuePattern = RegExp(r"\d+(\.\d+)?(\sto\s|\s-\s|-)\d+(\.\d+)?");
+    RegExpMatch? foundPattern = valuePattern.firstMatch(item);
+    if (foundPattern == null) {
+      return "No range found.";
+    }
+    int startPattern = foundPattern.start;
+    int endPattern = foundPattern.end;
+    return item.substring(startPattern, endPattern);
   }
 
   Future<List<String>> processImage() async {
@@ -190,40 +235,54 @@ class _RecognizeTextState extends State<RecognizeText> {
             textLinesList.add(line.text);
           }
         }
+        print(textLinesList);
 
-        var medItems = ["WBCs", "Neutophils", "Lymphocyles", "Monocytes", "Eosinophils", "Basophils", "RBCs", "Hb", "Hematocrit", "Platelets"];
+        // var medItems = ["WBCs", "Neutrophils", "Lymphocytes", "Monocytes", "Eosinophils", "Basophils", "RBCs", "Hb", "Hematocrit", "Platelets"];
+        //               WBC                    Lymphs                      Eos            Basos        RBC     Hemoglobin
+
 
         List<String> newResultList = [];
 
-        for(var item in textLinesList) {
-          if (getItemIndex(medItems, item) >= 0) {
+        for(String item in textLinesList) {
+          if (medItemFound(item)) {
             print("Found an important item: " + item);
             try {
-              var pos = textLinesList.indexOf(item);
-              var result = double.parse(textLinesList[pos + 1]);
-              var reference = textLinesList[pos + 2];
-              var ranges = reference.split("to");
-              var min = double.parse(ranges[0]);
-              var max = double.parse(ranges[1]);
-              var decision = "Abnormal";
-              if (result >= min && result <= max) {
-                decision = "Normal";
-              }else if (result < min) {
-                decision = "Abnormally Low";
-              }else if (result > max) {
-                decision = "Abnormally High";
+              int pos = textLinesList.indexOf(item);
+              // CONSTRAINT: The next item after the medical item found is
+              // always going to be the result.
+              // Additionally the next item after result is the range.
+              double result = double.parse(textLinesList[pos + 1]);
+              String reference = returnRange(textLinesList[pos + 2]);
+              if (reference != 'No range found.') {
+                double lower;
+                double upper;
+                if (reference.contains('-')) {
+                  List<String> ranges = reference.split('-');
+                  lower = double.parse(ranges[0]);
+                  upper = double.parse(ranges[1]);
+                } else {
+                  List<String> ranges = reference.split('to');
+                  lower = double.parse(ranges[0]);
+                  upper = double.parse(ranges[1]);
+                }
+                String decision = "Abnormal";
+                if (result >= lower && result <= upper) {
+                  decision = "Normal";
+                } else if (result < lower) {
+                  decision = "Abnormally Low";
+                } else if (result > upper) {
+                  decision = "Abnormally High";
+                }
+                String newResultStr = item + ": " + decision;
+                print(newResultStr);
+                newResultList.add(newResultStr);
               }
-              var newResultStr = item + ": " + decision;
-              print(newResultStr);
-              newResultList.add(newResultStr);
             } catch (e) {
               print("Failed to parse the item");
             }
           }
         }
-
         print(newResultList);
-        finalResults = newResultList;
         return newResultList;
       } catch (e) {
         rethrow;
@@ -246,18 +305,6 @@ class _RecognizeTextState extends State<RecognizeText> {
     return words[words.length-1];
   }
 
-  String returnCause(String result) {
-    final String firstWord = returnFirstWord(result);
-    final String lastWord = returnLastWord(result);
-    if (lastWord == "High") {
-      return bloodCauses[firstWord]![0];
-    } else if (lastWord == "Low") {
-      return bloodCauses[firstWord]![1];
-    } else {
-      return "Healthy result. Nothing to report.";
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -273,7 +320,6 @@ class _RecognizeTextState extends State<RecognizeText> {
               itemBuilder: (context, index) {
                 return ListTile(
                   title: Text(foundLines[index]),
-                  subtitle: Text(returnCause(foundLines[index])),
                 );
               },
               itemCount: foundLines.length,
@@ -284,73 +330,15 @@ class _RecognizeTextState extends State<RecognizeText> {
         }
       ),
       floatingActionButton: FloatingActionButton(
-        child: const Icon(Icons.arrow_forward),
-        onPressed: () {
-          Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (context) {
-                  return WriteToFile(information: finalResults);
-                  },
-              )
-          );
+        child: Icon(Icons.save),
+        onPressed: () async {
+          final Directory? dir = await getExternalStorageDirectory();
+          final File file = File('${dir!.path}/information.txt');
+          String stringFromList = foundLines.join('\n ');
+          file.writeAsString(stringFromList);
+          Share.shareFiles(['${dir.path}/information.txt']);
         }
       ),
-    );
-  }
-}
-
-class RegexScreen extends StatefulWidget {
-  const RegexScreen({Key? key, required this.foundLines}) : super(key: key);
-
-  final List<String> foundLines;
-
-  @override
-  _RegexScreenState createState() => _RegexScreenState();
-}
-
-class _RegexScreenState extends State<RegexScreen> {
-  RegExp hemoglobinRe = RegExp(r"Hemoglobin");
-
-  bool foundMatch() {
-    for (String line in widget.foundLines) {
-      if (hemoglobinRe.hasMatch(line)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      child: foundMatch() ? Text("Found") : Text("Not Found"),
-    );
-  }
-}
-
-class WriteToFile extends StatefulWidget {
-  const WriteToFile({Key? key, required this.information}) : super(key: key);
-
-  final List<String> information;
-
-  @override
-  _WriteToFileState createState() => _WriteToFileState();
-}
-
-class _WriteToFileState extends State<WriteToFile> {
-  void write() async {
-    final Directory dir = await getApplicationDocumentsDirectory();
-    final File file = File('${dir.path}/information.txt');
-    String stringFromList = widget.information.join('');
-    file.writeAsString(stringFromList);
-    print('confirmed');
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return ElevatedButton(
-      child: Text("Confirm Write"),
-      onPressed: () => write(),
     );
   }
 }
